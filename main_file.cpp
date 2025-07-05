@@ -4,15 +4,18 @@
 #include <stdlib.h>           // Стандартная библиотека C (для функций rand(), srand())
 #include <time.h>             // Библиотека для работы со временем (для srand(time(0)))
 #include <string>             // Библиотека для работы со строками C++
+#include <iostream>
 
 // Константы игры
 const int SCREEN_WIDTH = 800;  // Ширина игрового окна в пикселях
 const int SCREEN_HEIGHT = 600; // Высота игрового окна в пикселях
 const int GRID_SIZE = 50;      // Размер одной клетки парковки в пикселях
-const int GRID_WIDTH = 10;     // Ширина парковки в клетках
-const int GRID_HEIGHT = 10;    // Высота парковки в клетках
-const int MAX_CARS = 30;       // Максимальное количество машин на парковке
-const int EXIT_WIDTH = 3;      // Ширина выезда с парковки в клетках
+const int GRID_WIDTH = 8;     // Ширина парковки в клетках
+const int GRID_HEIGHT = 8;    // Высота парковки в клетках
+const int MAX_CARS = 20;       // Максимальное количество машин на парковке
+const int EXIT_WIDTH = 2;      // Ширина выезда с парковки в клетках
+const int LEFT_X = 200;        // Начало области парковки по х
+const int LEFT_Y = 100;         // Начало области парковки по y
 
 // Направления движения машин
 enum Direction { UP, RIGHT, DOWN, LEFT };
@@ -23,17 +26,20 @@ enum GameState { MENU, PLAYING, WIN };
 // Структура, описывающая машину
 struct Car {
     int x, y;               // Координаты головы машины (первой клетки)
-    int length;             // Длина машины в клетках (2 или 3)
+    int length;
     Direction dir;          // Направление движения машины
     SDL_Texture* texture;   // Текстура для отрисовки машины
     bool isSelected;        // Флаг, выбрана ли машина игроком
     bool exited;            // Флаг, выехала ли машина с парковки
+    SDL_Rect drawRect;      // Прямоугольник для отрисовки всей машины
 };
 
 // Глобальные переменные
 SDL_Window* window = NULL;      // Указатель на окно приложения
 SDL_Renderer* renderer = NULL;  // Указатель на рендерер для отрисовки
 TTF_Font* font = NULL;          // Указатель на шрифт для текста
+TTF_Font* font_small = NULL;  
+TTF_Font* font_big = NULL;  
 GameState gameState = MENU;     // Текущее состояние игры (по умолчанию меню)
 int difficulty = 1;             // Уровень сложности (1-3)
 Car cars[MAX_CARS];             // Массив машин на парковке
@@ -50,19 +56,22 @@ SDL_Texture* winTexture = NULL;        // Текстура надписи "ПО�
 // Позиции выездов с парковки (центры сторон)
 SDL_Point exits[4] = {
     {0, GRID_HEIGHT/2},             // Левый край
-    {GRID_WIDTH-1, GRID_HEIGHT/2},  // Правый край
+    {GRID_WIDTH, GRID_HEIGHT/2},  // Правый край
     {GRID_WIDTH/2, 0},              // Верхний край
-    {GRID_WIDTH/2, GRID_HEIGHT-1}   // Нижний край
+    {GRID_WIDTH/2, GRID_HEIGHT}   // Нижний край
 };
 
 // Функция загрузки текстуры из файла
-SDL_Texture* loadTexture(const char* path) {
+SDL_Texture* loadTexture(const char* path, int* w = nullptr, int* h = nullptr) {
     // Загрузка изображения в поверхность (SDL_Surface)
     SDL_Surface* surface = IMG_Load(path);
     if (!surface) {
         printf("Не удалось загрузить изображение %s! Ошибка: %s\n", path, IMG_GetError());
         return NULL;
     }
+
+    if (w) *w = surface->w;
+    if (h) *h = surface->h;
 
     // Создание текстуры из поверхности
     SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
@@ -76,9 +85,9 @@ SDL_Texture* loadTexture(const char* path) {
 }
 
 // Функция создания текстуры из текста
-SDL_Texture* createTextTexture(const char* text, SDL_Color color) {
+SDL_Texture* createTextTexture(const char* text, SDL_Color color, TTF_Font* font_in = font) {
     // Создание поверхности с текстом
-    SDL_Surface* surface = TTF_RenderText_Solid(font, text, color);
+    SDL_Surface* surface = TTF_RenderText_Solid(font_in, text, color);
     if (!surface) {
         printf("Не удалось создать поверхность из текста! Ошибка: %s\n", TTF_GetError());
         return NULL;
@@ -132,16 +141,19 @@ bool initSDL() {
 
     // Загрузка шрифта из файла
     font = TTF_OpenFont("font/arial.ttf", 24);
+    font_small = TTF_OpenFont("font/arial.ttf", 12);
+    font_big = TTF_OpenFont("font/arial.ttf", 48);
     if (!font) {
         printf("Не удалось загрузить шрифт! Ошибка: %s\n", TTF_GetError());
         return false;
     }
 
     // Загрузка всех необходимых текстур
+    int carTexW, carTexH;
     backgroundTexture = loadTexture("assets/background.png"); // Фон
-    carTexture = loadTexture("assets/car.png");              // Машина
+    carTexture = loadTexture("assets/car.png", &carTexW, &carTexH);              // Машина
     exitTexture = loadTexture("assets/exit.png");            // Выезд
-    winTexture = createTextTexture("ПОБЕДА!", {255, 215, 0, 255}); // Текст победы
+    winTexture = createTextTexture("WIN!", {255, 255, 51, 255}, font_big); // Текст победы
 
     // Проверка, что все текстуры загружены успешно
     if (!backgroundTexture || !carTexture || !exitTexture || !winTexture) {
@@ -208,7 +220,25 @@ bool isCellFree(int x, int y) {
     }
     return true; // Клетка свободна
 }
-
+SDL_Rect calculateCarRect(const Car& car) {
+    SDL_Rect rect;
+    
+    if (car.dir == UP || car.dir == DOWN) {
+        // Вертикальные машины (2 клетки в высоту)
+        rect.x = LEFT_X + car.x * GRID_SIZE;
+        rect.y = LEFT_Y + (car.dir == DOWN ? car.y : car.y - 1) * GRID_SIZE;
+        rect.w = GRID_SIZE;
+        rect.h = 2 * GRID_SIZE; // Фиксированная длина
+    } else {
+        // Горизонтальные машины (2 клетки в ширину)
+        rect.x = LEFT_X + (car.dir == RIGHT ? car.x : car.x - 1) * GRID_SIZE;
+        rect.y = LEFT_Y + car.y * GRID_SIZE;
+        rect.w = 2 * GRID_SIZE; // Фиксированная длина
+        rect.h = GRID_SIZE;
+    }
+    
+    return rect;
+}
 // Функция генерации случайной парковки
 void generateParking() {
     carCount = 0;       // Сброс количества машин
@@ -219,10 +249,12 @@ void generateParking() {
     // Количество машин зависит от сложности
     int numCars = 10 + (difficulty - 1) * 5;
     
+    
+
     // Генерация машин
     for (int i = 0; i < numCars; i++) {
         Car car;
-        car.length = (rand() % 2) + 1; // Длина 1 или 2 (на самом деле 2 или 3, так как % 2 дает 0 или 1)
+        car.length = 2; // Длина 2 
         car.dir = static_cast<Direction>(rand() % 4); // Случайное направление
         car.texture = carTexture;      // Текстура машины
         car.isSelected = false;        // Изначально не выбрана
@@ -232,7 +264,7 @@ void generateParking() {
         int attempts = 0;    // Счетчик попыток размещения
 
         // Попытки разместить машину на парковке
-        while (!placed && attempts < 100) {
+        while (!placed && attempts < 1000) {
             attempts++;
             
             // Генерация случайных координат в зависимости от направления
@@ -243,6 +275,8 @@ void generateParking() {
                 car.x = rand() % (GRID_WIDTH - car.length + 1);
                 car.y = rand() % GRID_HEIGHT;
             }
+
+            car.drawRect = calculateCarRect(car);
 
             placed = true; // Предполагаем, что размещение удалось
             // Проверка всех клеток, которые займет машина
@@ -347,6 +381,7 @@ void moveCar(Car* car, int dx, int dy) {
     car->x += dx;
     car->y += dy;
     moves++; // Увеличение счетчика ходов
+    car->drawRect = calculateCarRect(*car); // Обновляем прямоугольник отрисовки
 
     // Проверка, выехала ли машина полностью
     bool exited = true;
@@ -395,20 +430,38 @@ void renderMenu() {
     // Отрисовка фона
     SDL_RenderCopy(renderer, backgroundTexture, NULL, NULL);
 
+    //Отрисовка черного полупрозрачного прямоугольника
+    SDL_SetRenderDrawColor(renderer, 0,0,0,128);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_Rect back = {200, 145, 400, 300};
+    SDL_RenderFillRect(renderer, &back);
+
+    //Author
+    SDL_SetRenderDrawColor(renderer, 0,0,0,200);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_Rect backauthor = {175, 575, 455, 30};
+    SDL_RenderFillRect(renderer, &backauthor);
+    SDL_Color blue = {0, 192, 255, 255};
+    SDL_Texture* author = createTextTexture("Aleksey_Krechetov_M3O-121BV-24", blue, font_small);
+    SDL_Rect authorRect = {180, 580, 450, 15};
+    SDL_RenderCopy(renderer, author, NULL, &authorRect);
+    SDL_DestroyTexture(author); // Удаление временной текстуры
+
+
     // Создание и отрисовка текста заголовка
     SDL_Color white = {255, 255, 255, 255};
-    SDL_Texture* title = createTextTexture("Выезд с парковки", white);
-    SDL_Rect titleRect = {SCREEN_WIDTH/2 - 150, 100, 300, 60};
+    SDL_Texture* title = createTextTexture("Parking escape", white);
+    SDL_Rect titleRect = {SCREEN_WIDTH/2 - 150, 150, 300, 60};
     SDL_RenderCopy(renderer, title, NULL, &titleRect);
     SDL_DestroyTexture(title); // Удаление временной текстуры
 
     // Массивы для кнопок сложности
-    const char* difficulties[] = {"Легкий", "Средний", "Сложный"};
+    const char* difficulties[] = {"Low", "Medium", "High"};
     SDL_Color colors[] = {{0, 200, 0, 255}, {200, 200, 0, 255}, {200, 0, 0, 255}};
     
     // Отрисовка кнопок выбора сложности
     for (int i = 0; i < 3; i++) {
-        SDL_Rect buttonRect = {SCREEN_WIDTH/2 - 100, 250 + i*100, 200, 60};
+        SDL_Rect buttonRect = {SCREEN_WIDTH/2 - 90, 220 + i*70, 180, 50};
         
         // Отрисовка прямоугольника кнопки
         SDL_SetRenderDrawColor(renderer, colors[i].r, colors[i].g, colors[i].b, colors[i].a);
@@ -436,16 +489,16 @@ void renderExits() {
     for (int i = 0; i < 4; i++) {
         if (i == 0 || i == 1) { // Горизонтальные выезды (левый и правый)
             SDL_Rect exitRect = {
-                150 + exits[i].x * GRID_SIZE - (i == 0 ? 0 : GRID_SIZE),
-                50 + (exits[i].y - EXIT_WIDTH/2) * GRID_SIZE,
+                LEFT_X + exits[i].x * GRID_SIZE - (i == 0 ? 0 : GRID_SIZE),
+                LEFT_Y + (exits[i].y - EXIT_WIDTH/2) * GRID_SIZE,
                 GRID_SIZE,
                 EXIT_WIDTH * GRID_SIZE
             };
             SDL_RenderCopy(renderer, exitTexture, NULL, &exitRect);
         } else { // Вертикальные выезды (верхний и нижний)
             SDL_Rect exitRect = {
-                150 + (exits[i].x - EXIT_WIDTH/2) * GRID_SIZE,
-                50 + exits[i].y * GRID_SIZE - (i == 2 ? 0 : GRID_SIZE),
+                LEFT_X + (exits[i].x - EXIT_WIDTH/2) * GRID_SIZE,
+                LEFT_Y + exits[i].y * GRID_SIZE - (i == 2 ? 0 : GRID_SIZE),
                 EXIT_WIDTH * GRID_SIZE,
                 GRID_SIZE
             };
@@ -459,76 +512,59 @@ void renderGame() {
     // Отрисовка фона
     SDL_RenderCopy(renderer, backgroundTexture, NULL, NULL);
 
+    //Отрисовка черного полупрозрачного прямоугольника
+    SDL_SetRenderDrawColor(renderer, 0,0,0,128);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_Rect back = {15, 15, 160, 75};
+    SDL_RenderFillRect(renderer, &back);
+
     // Отрисовка парковки (серый прямоугольник)
-    SDL_Rect parking = {150, 50, GRID_WIDTH*GRID_SIZE, GRID_HEIGHT*GRID_SIZE};
-    SDL_SetRenderDrawColor(renderer, 200, 200, 200, 200); // Полупрозрачный серый
+    SDL_Rect parking = {LEFT_X, LEFT_Y, GRID_WIDTH*GRID_SIZE, GRID_HEIGHT*GRID_SIZE};
+    SDL_SetRenderDrawColor(renderer, 126, 126, 126, 200); // Полупрозрачный серый
     SDL_RenderFillRect(renderer, &parking);
 
     // Отрисовка разметки парковки (белые линии)
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     for (int i = 0; i <= GRID_WIDTH; i++)
-        SDL_RenderDrawLine(renderer, 150+i*GRID_SIZE, 50, 150+i*GRID_SIZE, 50+GRID_HEIGHT*GRID_SIZE);
+        SDL_RenderDrawLine(renderer, LEFT_X+i*GRID_SIZE, LEFT_Y, LEFT_X+i*GRID_SIZE, LEFT_Y+GRID_HEIGHT*GRID_SIZE);
     for (int i = 0; i <= GRID_HEIGHT; i++)
-        SDL_RenderDrawLine(renderer, 150, 50+i*GRID_SIZE, 150+GRID_WIDTH*GRID_SIZE, 50+i*GRID_SIZE);
+        SDL_RenderDrawLine(renderer, LEFT_X, LEFT_Y+i*GRID_SIZE, LEFT_X+GRID_WIDTH*GRID_SIZE, LEFT_Y+i*GRID_SIZE);
 
     // Отрисовка выездов
     renderExits();
 
     // Отрисовка всех машин
     for (int i = 0; i < carCount; i++) {
-        if (cars[i].exited) continue; // Пропуск выехавших машин
+        if (cars[i].exited) continue;
 
-        // Отрисовка каждой клетки машины
-        for (int j = 0; j < cars[i].length; j++) {
-            SDL_Rect rect;
-            
-            // Расчет координат клетки в зависимости от направления
-            if (cars[i].dir == UP || cars[i].dir == DOWN) {
-                rect.x = 150 + cars[i].x*GRID_SIZE + 2; // +2 для отступа от границы клетки
-                rect.y = 50 + (cars[i].y + (cars[i].dir == DOWN ? j : -j))*GRID_SIZE + 2;
-            } else {
-                rect.x = 150 + (cars[i].x + (cars[i].dir == RIGHT ? j : -j))*GRID_SIZE + 2;
-                rect.y = 50 + cars[i].y*GRID_SIZE + 2;
-            }
-            
-            rect.w = rect.h = GRID_SIZE - 4; // Размер клетки с отступами
-            
-            // Угол поворота текстуры в зависимости от направления
-            double angle = 0;
-            if (cars[i].dir == UP) angle = 270;
-            else if (cars[i].dir == RIGHT) angle = 0;
-            else if (cars[i].dir == DOWN) angle = 90;
-            else if (cars[i].dir == LEFT) angle = 180;
-            
-            // Отрисовка текстуры машины с поворотом
-            SDL_RenderCopyEx(renderer, cars[i].texture, NULL, &rect, angle, NULL, SDL_FLIP_NONE);
+        // Угол поворота в зависимости от направления
+        double angle = 0;
+        switch (cars[i].dir) {
+            case UP:    angle = 0; break;
+            case RIGHT: angle = 270; break;
+            case DOWN: angle = 180; break;
+            case LEFT: angle = 90; break;
         }
 
-        // Если машина выбрана, рисуем белую рамку вокруг нее
+        // Центр поворота (середина текстуры)
+        SDL_Point center = {cars[i].drawRect.w/2, cars[i].drawRect.h/2};
+        
+        // Отрисовка с поворотом
+        SDL_RenderCopyEx(renderer, cars[i].texture, NULL, &cars[i].drawRect, 
+                        angle, &center, SDL_FLIP_NONE);
+
+        // Выделение выбранной машины
         if (cars[i].isSelected) {
-            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-            SDL_Rect outline;
-            
-            if (cars[i].dir == UP || cars[i].dir == DOWN) {
-                outline.x = 150 + cars[i].x*GRID_SIZE;
-                outline.y = 50 + (cars[i].dir == DOWN ? cars[i].y : cars[i].y - cars[i].length + 1)*GRID_SIZE;
-                outline.w = GRID_SIZE;
-                outline.h = cars[i].length * GRID_SIZE;
-            } else {
-                outline.x = 150 + (cars[i].dir == RIGHT ? cars[i].x : cars[i].x - cars[i].length + 1)*GRID_SIZE;
-                outline.y = 50 + cars[i].y*GRID_SIZE;
-                outline.w = cars[i].length * GRID_SIZE;
-                outline.h = GRID_SIZE;
-            }
-            
-            SDL_RenderDrawRect(renderer, &outline);
+            SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+            SDL_RenderDrawRect(renderer, &cars[i].drawRect);
         }
     }
+    
 
     // Отображение информации о сложности и количестве ходов
     SDL_Color white = {255, 255, 255, 255};
-    std::string diffText = "Сложность: " + std::to_string(difficulty);
-    std::string movesText = "Ходы: " + std::to_string(moves);
+    std::string diffText = "Difficulty: " + std::to_string(difficulty);
+    std::string movesText = "Steps: " + std::to_string(moves);
     
     SDL_Texture* diffTexture = createTextTexture(diffText.c_str(), white);
     SDL_Texture* movesTexture = createTextTexture(movesText.c_str(), white);
@@ -550,18 +586,24 @@ void renderWin() {
     // Отрисовка фона
     SDL_RenderCopy(renderer, backgroundTexture, NULL, NULL);
 
+    //Отрисовка черного полупрозрачного прямоугольника
+    SDL_SetRenderDrawColor(renderer, 0,0,0,128);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_Rect back = {200, 150, 400, 300};
+    SDL_RenderFillRect(renderer, &back);
+
     // Отрисовка текста "ПОБЕДА!"
     int winW, winH;
     SDL_QueryTexture(winTexture, NULL, NULL, &winW, &winH);
-    SDL_Rect winRect = {SCREEN_WIDTH/2 - winW/2, 150, winW, winH};
+    SDL_Rect winRect = {SCREEN_WIDTH/2 - winW/2, 190, winW, winH};
     SDL_RenderCopy(renderer, winTexture, NULL, &winRect);
 
     // Отрисовка информации о количестве ходов
     SDL_Color white = {255, 255, 255, 255};
-    std::string movesText = "Ходов сделано: " + std::to_string(moves);
+    std::string movesText = "Steps: " + std::to_string(moves);
     SDL_Texture* movesTexture = createTextTexture(movesText.c_str(), white);
     
-    SDL_Rect movesRect = {SCREEN_WIDTH/2 - 100, 250, 200, 30};
+    SDL_Rect movesRect = {SCREEN_WIDTH/2 - 100, 280, 200, 30};
     SDL_RenderCopy(renderer, movesTexture, NULL, &movesRect);
     SDL_DestroyTexture(movesTexture);
 
@@ -570,7 +612,7 @@ void renderWin() {
     SDL_SetRenderDrawColor(renderer, 0, 0, 200, 255);
     SDL_RenderFillRect(renderer, &menuButton);
     
-    SDL_Texture* menuText = createTextTexture("В меню", white);
+    SDL_Texture* menuText = createTextTexture("Menu", white);
     int textW, textH;
     SDL_QueryTexture(menuText, NULL, NULL, &textW, &textH);
     SDL_Rect textRect = {
@@ -591,7 +633,7 @@ void handleClick(int x, int y) {
         case MENU:
             // Обработка кликов по кнопкам сложности в меню
             for (int i = 0; i < 3; i++) {
-                SDL_Rect rect = {SCREEN_WIDTH/2 - 100, 250 + i*100, 200, 60};
+                SDL_Rect rect = {SCREEN_WIDTH/2 - 90, 220 + i*70, 180, 50};
                 if (x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h) {
                     difficulty = i + 1; // Установка сложности
                     generateParking();   // Генерация парковки
@@ -603,12 +645,12 @@ void handleClick(int x, int y) {
             
         case PLAYING: {
             // Проверка, что клик был внутри игрового поля
-            if (x < 150 || x >= 150 + GRID_WIDTH*GRID_SIZE || y < 50 || y >= 50 + GRID_HEIGHT*GRID_SIZE)
+            if (x < LEFT_X || x >= LEFT_X + GRID_WIDTH*GRID_SIZE || y < LEFT_Y || y >= LEFT_Y + GRID_HEIGHT*GRID_SIZE)
                 return;
                 
             // Перевод координат клика в координаты сетки
-            int gx = (x - 150) / GRID_SIZE;
-            int gy = (y - 50) / GRID_SIZE;
+            int gx = (x - LEFT_X) / GRID_SIZE;
+            int gy = (y - LEFT_Y) / GRID_SIZE;
             
             // Сброс выделения всех машин
             for (int i = 0; i < carCount; i++)
@@ -664,6 +706,7 @@ int main(int argc, char* argv[]) {
     
     // Главный игровой цикл
     while (running) {
+        bool chit = false;
         // Обработка событий
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) {
@@ -671,6 +714,7 @@ int main(int argc, char* argv[]) {
             } else if (e.type == SDL_MOUSEBUTTONDOWN) {
                 // Обработка клика мыши
                 int x, y;
+                std::cout << x << " " << y << std::endl;
                 SDL_GetMouseState(&x, &y);
                 handleClick(x, y);
             } else if (e.type == SDL_KEYDOWN && gameState == PLAYING && selectedCar) {
@@ -680,10 +724,11 @@ int main(int argc, char* argv[]) {
                     case SDLK_DOWN: moveCar(selectedCar, 0, 1); break;   // Вниз
                     case SDLK_LEFT: moveCar(selectedCar, -1, 0); break;  // Влево
                     case SDLK_RIGHT: moveCar(selectedCar, 1, 0); break;  // Вправо
+                    case SDLK_q: chit = true; break;
                 }
                 
                 // Проверка условия победы после каждого хода
-                if (checkWin()) gameState = WIN;
+                if (checkWin() || chit) gameState = WIN;
             }
         }
         
