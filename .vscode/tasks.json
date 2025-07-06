@@ -1,0 +1,28 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build with SDL2",
+      "type": "shell",
+      "command": "g++",
+      "args": [
+        "-g",
+        "main.cpp",
+        "-o",
+        "main.exe",
+        "-I", "${workspaceFolder}\\lib\\SDL2\\include",
+        "-L", "${workspaceFolder}\\lib\\SDL2\\lib",
+        "-lmingw32",
+        "-lSDL2main",
+        "-lSDL2",
+        "-lSDL2_image",
+        "-lSDL2_ttf"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}

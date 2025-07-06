@@ -1,0 +1,19 @@
+{
+  "configurations": [
+    {
+      "name": "Win32",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "${workspaceFolder}/lib/SDL2/x86_64-w64-mingw32/include/**",
+        "${workspaceFolder}/lib/SDL2_image/x86_64-w64-mingw32/include/**",
+        "${workspaceFolder}/lib/SDL2_ttf/x86_64-w64-mingw32/include/**"
+      ],
+      "defines": [],
+      "compilerPath": "C:/MinGW/bin/g++.exe",
+      "cStandard": "c17",
+      "cppStandard": "c++17",
+      "intelliSenseMode": "windows-gcc-x64"
+    }
+  ],
+  "version": 4
+}

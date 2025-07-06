@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run SDL2 Program",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}\\main.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "miDebuggerPath": "C:\\MinGW\\bin\\gdb.exe",
+      "preLaunchTask": "Build with SDL2"
+    }
+  ]
+}
