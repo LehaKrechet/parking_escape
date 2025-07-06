@@ -16,6 +16,7 @@ const int MAX_CARS = 20;       // Максимальное количество 
 const int EXIT_WIDTH = 2;      // Ширина выезда с парковки в клетках
 const int LEFT_X = 200;        // Начало области парковки по х
 const int LEFT_Y = 100;         // Начало области парковки по y
+const int MINOBSTACLECOUNT = 3;  // Минимальное колличество препятствий
 
 // Направления движения машин
 enum Direction { UP, RIGHT, DOWN, LEFT };
@@ -34,6 +35,12 @@ struct Car {
     SDL_Rect drawRect;      // Прямоугольник для отрисовки всей машины
 };
 
+struct Obstacle {
+    int x, y;           // Координаты препятствия
+    int length;         // Длина препятствия (1-5 клеток)
+    bool isHorizontal;  // true - горизонтальное, false - вертикальное
+};
+
 // Глобальные переменные
 SDL_Window* window = NULL;      // Указатель на окно приложения
 SDL_Renderer* renderer = NULL;  // Указатель на рендерер для отрисовки
@@ -46,6 +53,9 @@ Car cars[MAX_CARS];             // Массив машин на парковке
 int carCount = 0;               // Количество машин на парковке
 Car* selectedCar = NULL;        // Указатель на выбранную машину
 int moves = 0;                  // Количество сделанных ходов
+const int MAX_OBSTACLES = 20; // Максимальное количество препятствий
+Obstacle obstacles[MAX_OBSTACLES]; // Массив препятствий
+int obstacleCount = 0;  // Количество препятствий
 
 // Текстуры
 SDL_Texture* backgroundTexture = NULL; // Текстура фона
@@ -183,6 +193,8 @@ void closeSDL() {
     SDL_Quit();
 }
 
+
+
 // Функция проверки, свободна ли указанная клетка
 bool isCellFree(int x, int y) {
     // Проверка, не находится ли клетка на выезде
@@ -196,6 +208,22 @@ bool isCellFree(int x, int y) {
     // Проверка выхода за границы парковки
     if (x < 0 || x >= GRID_WIDTH || y < 0 || y >= GRID_HEIGHT)
         return false;
+
+
+        // Проверка всех препятствий
+    for (int i = 0; i < obstacleCount; i++) {
+        if (obstacles[i].isHorizontal) {
+            // Горизонтальное препятствие
+            if (y == obstacles[i].y && x >= obstacles[i].x && x < obstacles[i].x + obstacles[i].length) {
+                return false;
+            }
+        } else {
+            // Вертикальное препятствие
+            if (x == obstacles[i].x && y >= obstacles[i].y && y < obstacles[i].y + obstacles[i].length) {
+                return false;
+            }
+        }
+    }
 
     // Проверка всех машин на парковке
     for (int i = 0; i < carCount; i++) {
@@ -220,6 +248,53 @@ bool isCellFree(int x, int y) {
     }
     return true; // Клетка свободна
 }
+
+// Добавьте эту функцию для генерации препятствий
+void generateObstacles() {
+    obstacleCount = 0;
+    srand(time(0));
+
+    // Количество препятствий зависит от сложности
+    int numObstacles = MINOBSTACLECOUNT + (difficulty - 1) * 2;
+    
+    for (int i = 0; i < numObstacles && obstacleCount < MAX_OBSTACLES; i++) {
+        Obstacle obs;
+        obs.length = 1 + rand() % 5; // Длина от 1 до 5
+        obs.isHorizontal = rand() % 2 == 0; // Случайная ориентация
+
+        bool placed = false;
+        int attempts = 0;
+
+        while (!placed && attempts < 100) {
+            attempts++;
+            
+            if (obs.isHorizontal) {
+                obs.x = rand() % (GRID_WIDTH - obs.length + 1);
+                obs.y = 1 + rand() % (GRID_HEIGHT - 2); // Не на границах
+            } else {
+                obs.x = 1 + rand() % (GRID_WIDTH - 2); // Не на границах
+                obs.y = rand() % (GRID_HEIGHT - obs.length + 1);
+            }
+
+            // Проверка, что препятствие не пересекается с другими
+            placed = true;
+            for (int j = 0; j < obs.length; j++) {
+                int ox = obs.isHorizontal ? obs.x + j : obs.x;
+                int oy = obs.isHorizontal ? obs.y : obs.y + j;
+                
+                if (!isCellFree(ox, oy)) {
+                    placed = false;
+                    break;
+                }
+            }
+        }
+
+        if (placed) {
+            obstacles[obstacleCount++] = obs;
+        }
+    }
+}
+
 SDL_Rect calculateCarRect(const Car& car) {
     SDL_Rect rect;
     
@@ -245,6 +320,8 @@ void generateParking() {
     moves = 0;          // Сброс счетчика ходов
     selectedCar = NULL; // Сброс выбранной машины
     srand(time(0));     // Инициализация генератора случайных чисел
+
+    generateObstacles(); // Генерация препятствий
 
     // Количество машин зависит от сложности
     int numCars = 10 + (difficulty - 1) * 5;
@@ -316,6 +393,8 @@ void generateParking() {
         }
     }
 }
+
+
 
 // Функция проверки, может ли машина двигаться в указанном направлении
 bool canMove(const Car* car, int dx, int dy) {
@@ -414,6 +493,33 @@ void moveCar(Car* car, int dx, int dy) {
     }
 
     car->exited = exited; // Установка флага выезда
+}
+
+// Функция только для поворота машины (без движения)
+void rotateCar(Car* car, bool turnLeft) {
+    if (!car || car->exited) return;
+
+    // Поворачиваем машину
+    if (turnLeft) {
+        // Поворот налево (против часовой стрелки)
+        switch (car->dir) {
+            case UP:    car->dir = LEFT; break;
+            case LEFT:  car->dir = DOWN; break;
+            case DOWN:  car->dir = RIGHT; break;
+            case RIGHT: car->dir = UP; break;
+        }
+    } else {
+        // Поворот направо (по часовой стрелке)
+        switch (car->dir) {
+            case UP:    car->dir = RIGHT; break;
+            case RIGHT: car->dir = DOWN; break;
+            case DOWN:  car->dir = LEFT; break;
+            case LEFT:  car->dir = UP; break;
+        }
+    }
+
+    // Обновляем прямоугольник отрисовки (если нужно)
+    car->drawRect = calculateCarRect(*car);
 }
 
 // Функция проверки условия победы (все машины выехали)
@@ -523,6 +629,28 @@ void renderGame() {
     SDL_SetRenderDrawColor(renderer, 126, 126, 126, 200); // Полупрозрачный серый
     SDL_RenderFillRect(renderer, &parking);
 
+    // Отрисовка препятствий (темно-серые прямоугольники)
+    SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
+    for (int i = 0; i < obstacleCount; i++) {
+        if (obstacles[i].isHorizontal) {
+            SDL_Rect obsRect = {
+                LEFT_X + obstacles[i].x * GRID_SIZE,
+                LEFT_Y + obstacles[i].y * GRID_SIZE,
+                obstacles[i].length * GRID_SIZE,
+                GRID_SIZE
+            };
+            SDL_RenderFillRect(renderer, &obsRect);
+        } else {
+            SDL_Rect obsRect = {
+                LEFT_X + obstacles[i].x * GRID_SIZE,
+                LEFT_Y + obstacles[i].y * GRID_SIZE,
+                GRID_SIZE,
+                obstacles[i].length * GRID_SIZE
+            };
+            SDL_RenderFillRect(renderer, &obsRect);
+        }
+    }
+
     // Отрисовка разметки парковки (белые линии)
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     for (int i = 0; i <= GRID_WIDTH; i++)
@@ -541,9 +669,9 @@ void renderGame() {
         double angle = 0;
         switch (cars[i].dir) {
             case UP:    angle = 0; break;
-            case RIGHT: angle = 270; break;
+            case RIGHT: angle = 90; break;
             case DOWN: angle = 180; break;
-            case LEFT: angle = 90; break;
+            case LEFT: angle = 270; break;
         }
 
         // Центр поворота (середина текстуры)
@@ -720,12 +848,33 @@ int main(int argc, char* argv[]) {
             } else if (e.type == SDL_KEYDOWN && gameState == PLAYING && selectedCar) {
                 // Обработка нажатий клавиш для управления выбранной машиной
                 switch (e.key.keysym.sym) {
-                    case SDLK_UP: moveCar(selectedCar, 0, -1); break;    // Вверх
-                    case SDLK_DOWN: moveCar(selectedCar, 0, 1); break;   // Вниз
-                    case SDLK_LEFT: moveCar(selectedCar, -1, 0); break;  // Влево
-                    case SDLK_RIGHT: moveCar(selectedCar, 1, 0); break;  // Вправо
-                    case SDLK_q: chit = true; break;
-                }
+                        case SDLK_UP:  // Движение ВПЕРЕД (по направлению машины)
+                            switch (selectedCar->dir) {
+                                case UP:    moveCar(selectedCar, 0, -1); break;  // Движение вверх
+                                case DOWN:  moveCar(selectedCar, 0, 1); break;   // Движение вниз
+                                case LEFT:  moveCar(selectedCar, -1, 0); break;  // Движение влево
+                                case RIGHT: moveCar(selectedCar, 1, 0); break;   // Движение вправо
+                            }
+                            break;
+
+                        case SDLK_DOWN:  // Движение НАЗАД (против направления машины)
+                            switch (selectedCar->dir) {
+                                case UP:    moveCar(selectedCar, 0, 1); break;   // Назад (вниз)
+                                case DOWN:  moveCar(selectedCar, 0, -1); break;  // Назад (вверх)
+                                case LEFT:  moveCar(selectedCar, 1, 0); break;   // Назад (вправо)
+                                case RIGHT: moveCar(selectedCar, -1, 0); break;  // Назад (влево)
+                            }
+                            break;
+                        case SDLK_LEFT: 
+                            rotateCar(selectedCar, true);  // Поворот налево
+                            break;
+                        case SDLK_RIGHT: 
+                            rotateCar(selectedCar, false);  // Поворот направо
+                            break;
+                        case SDLK_q: 
+                            chit = true; 
+                            break;
+                    }
                 
                 // Проверка условия победы после каждого хода
                 if (checkWin() || chit) gameState = WIN;

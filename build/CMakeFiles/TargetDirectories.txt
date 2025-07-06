@@ -1,0 +1,3 @@
+/home/alekres/programmer/C++/Game/parking_escape/build/CMakeFiles/parking_game.dir
+/home/alekres/programmer/C++/Game/parking_escape/build/CMakeFiles/edit_cache.dir
+/home/alekres/programmer/C++/Game/parking_escape/build/CMakeFiles/rebuild_cache.dir
