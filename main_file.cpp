@@ -877,7 +877,8 @@ int main(int argc, char* argv[]) {
                     }
                 
                 // Проверка условия победы после каждого хода
-                if (checkWin() || chit) gameState = WIN;
+                if (checkWin()) gameState = WIN;
+                if (chit) gameState = MENU;
             }
         }
         
