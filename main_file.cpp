@@ -249,7 +249,7 @@ bool isCellFree(int x, int y) {
     return true; // Клетка свободна
 }
 
-// Добавьте эту функцию для генерации препятствий
+//Функция для генерации препятствий
 void generateObstacles() {
     obstacleCount = 0;
     srand(time(0));
@@ -294,7 +294,7 @@ void generateObstacles() {
         }
     }
 }
-
+//Функция для расчета формы машины
 SDL_Rect calculateCarRect(const Car& car) {
     SDL_Rect rect;
     
@@ -495,7 +495,7 @@ void moveCar(Car* car, int dx, int dy) {
     car->exited = exited; // Установка флага выезда
 }
 
-// Функция только для поворота машины (без движения)
+// Функция только для поворота машины
 void rotateCar(Car* car, bool turnLeft) {
     if (!car || car->exited) return;
 
