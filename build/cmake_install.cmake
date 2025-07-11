@@ -1,4 +1,4 @@
-# Install script for directory: /home/alekres/programmer/C++/Game/parking_escape
+# Install script for directory: /home/krechet/home/programmer/c++/game/parking_escape
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -50,5 +50,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "/home/alekres/programmer/C++/Game/parking_escape/build/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "/home/krechet/home/programmer/c++/game/parking_escape/build/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")

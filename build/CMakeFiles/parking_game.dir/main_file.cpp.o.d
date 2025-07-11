@@ -1,5 +1,5 @@
 CMakeFiles/parking_game.dir/main_file.cpp.o: \
- /home/alekres/programmer/C++/Game/parking_escape/main_file.cpp \
+ /home/krechet/home/programmer/c++/game/parking_escape/main_file.cpp \
  /usr/include/stdc-predef.h /usr/include/SDL2/SDL.h \
  /usr/include/SDL2/SDL_main.h /usr/include/SDL2/SDL_stdinc.h \
  /usr/include/SDL2/SDL_config.h \
