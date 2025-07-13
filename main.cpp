@@ -842,7 +842,6 @@ int main(int argc, char* argv[]) {
             } else if (e.type == SDL_MOUSEBUTTONDOWN) {
                 // Обработка клика мыши
                 int x, y;
-                std::cout << x << " " << y << std::endl;
                 SDL_GetMouseState(&x, &y);
                 handleClick(x, y);
             } else if (e.type == SDL_KEYDOWN && gameState == PLAYING && selectedCar) {
